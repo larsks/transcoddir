@@ -62,6 +62,10 @@ class Video(object):
         if self._format['format_name'] == 'tty':
             raise NotAVideo(self.path)
 
+        # This checks that there is at least one video stream available
+        if not any(s.get('codec_type') == 'video' for s in self._streams):
+            raise NotAVideo(self.path)
+
     def get_info(self):
         try:
             res = json.loads(subprocess.check_output(
