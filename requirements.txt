@@ -1,2 +1,4 @@
 pathlib2
 PyYAML
+celery
+redis
