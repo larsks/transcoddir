@@ -33,15 +33,21 @@ class Video(object):
             raise NotAVideo('no video streams available')
 
     def get_info(self):
-        try:
-            res = json.loads(subprocess.check_output(
-                ['ffprobe',
-                 '-show_streams', '-show_format',
-                 '-hide_banner',
-                 '-print_format', 'json', str(self.path)]))
-        except subprocess.CalledProcessError:
+        cmd = ['ffprobe',
+               '-show_streams', '-show_format',
+               '-hide_banner',
+               '-print_format', 'json', str(self.path)]
+
+        p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+
+        stdout, stderr = p.communicate()
+        if p.returncode != 0:
+            LOG.debug(stderr)
             raise NotAVideo('failed to read video metadata')
 
+        res = json.loads(stdout)
         self._streams = res.get('streams')
         self._format = res.get('format')
 
@@ -67,31 +73,31 @@ class Video(object):
         stream = [s for s in self._streams if s['codec_type'] == 'video'][0]
         return (stream['width'], stream['height'])
 
-    def transcode(self, output,
+    def transcode(self,
                   video_codec=None, video_args=None,
                   audio_codec=None, audio_args=None,
                   height=None, width=None, scale=True,
                   profile=None, loglevel='warning',
-                  create_dirs=False, dir_mode=0o755,
-                  copy_if_same=False):
-
-        output = Path(output)
-
-        if create_dirs:
-            output.parent.mkdir(mode=dir_mode, parents=True,
-                                exist_ok=True)
+                  copy_if_same=False, suffix=None,
+                  output=None, progress=None):
 
         cmd = [
             'ffmpeg',
             '-loglevel', loglevel, '-hide_banner', '-nostats',
             '-y',
-            '-i', str(self.path)
+            '-i', str(self.path),
         ]
+
+        if progress is not None:
+            cmd += [
+                '-progress', progress,
+            ]
 
         if profile is None:
             profile = {
                 'video_codec': 'copy',
                 'audio_codec': 'copy',
+                'suffix': '.vid',
             }
 
         if video_codec is not None:
@@ -108,6 +114,9 @@ class Video(object):
 
         if height is not None:
             profile['height'] = height
+
+        if suffix is not None:
+            profile['suffix'] = suffix
 
         if width is not None:
             profile['width'] = width
@@ -134,21 +143,29 @@ class Video(object):
         if profile.get('video_args'):
             cmd += shlex.split(profile['video_args'])
 
+        if output is None:
+            output = self.path.with_suffix(profile['suffix'])
+
         cmd += [str(output)]
 
         LOG.debug('running %s', cmd)
 
         try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError:
-            LOG.error('%s: transcoding failed: removing output file "%s"',
-                      self.path, output)
-            try:
-                output.unlink()
-            except OSError:
-                pass
+            p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
 
-            raise TranscodingFailed('transcoding failed')
+            stdout, stderr = p.communicate()
+            if p.returncode != 0:
+                LOG.debug(stderr)
+                LOG.error('%s: transcoding failed: removing output file "%s"',
+                          self.path, output)
+                try:
+                    output.unlink()
+                except OSError:
+                    pass
+
+                raise TranscodingFailed('transcoding failed')
         except KeyboardInterrupt:
             LOG.error('%s: transcoding interrupted by user: '
                       'removing output file "%s"',
