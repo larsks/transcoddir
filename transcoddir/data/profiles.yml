@@ -1,0 +1,31 @@
+ipad: &__default__
+  suffix: .m4v
+  audio_args: >
+    -strict -2
+  audio_codec: aac
+  height: 720
+  width: 1280
+  video_args: >
+    -profile:v main
+    -level 3.1
+    -preset fast
+    -crf 23
+    -x264-params ref=4
+    -movflags +faststart
+  video_codec: libx264
+ipad-small:
+  suffix: .m4v
+  audio_args:
+    -strict -2
+  audio_codec: aac
+  height: 480
+  width: 852
+  video_args:
+    -profile:v main
+    -level 3.1
+    -preset fast
+    -crf 23
+    -x264-params ref=4
+    -movflags +faststart
+  video_codec: libx264
+default: *__default__

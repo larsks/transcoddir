@@ -1,16 +1,18 @@
 #!/usr/bin/python
 
 import argparse
-import json
+import yaml
 import logging
-import shutil
-import subprocess
-import time
+import pkg_resources
 from pathlib2 import Path
 
 import video
 
 LOG = logging.getLogger(__name__)
+VIDEO_EXTENSIONS = (
+    '.mov,.mpg,.mp4,.avi,.wmf,.mkv,.ogg,.ogv,'
+    '.m4v,.mpeg,.webm,.flv,.wmv,.asf'
+)
 
 
 def parse_args():
@@ -23,70 +25,74 @@ def parse_args():
                    action='store_const',
                    const='DEBUG',
                    dest='loglevel')
-    p.add_argument('--input-dir', '-i',
-                   default='videos-in',
-                   type=Path)
-    p.add_argument('--output-dir', '-o',
-                   default='videos-out',
-                   type=Path)
-    p.add_argument('--failed-dir', '-f',
-                   default='videos-failed',
-                   type=Path)
-    p.add_argument('--create-dirs',
-                   action='store_true')
+    p.add_argument('--profiles', '-P')
     p.add_argument('--profile', '-p',
                    default='ipad')
+    p.add_argument('--video-extensions', '-V',
+                   default=VIDEO_EXTENSIONS,
+                   type=lambda ext: ext.split(','))
+    p.add_argument('--keep', '-k',
+                   action='store_true')
+
+    p.add_argument('things', nargs='*')
 
     p.set_defaults(loglevel='WARNING')
     return p.parse_args()
 
 
-def move_file(src, dest):
-    LOG.debug('move %s to %s', src, dest)
-    dest.parent.mkdir(mode=0o755,
-                      parents=True,
-                      exist_ok=True)
-    shutil.move(str(src), str(dest))
+def process_one_file(path):
+    global args
+    global profiles
+
+    if path.suffix not in args.video_extensions:
+        LOG.info('skipped %s: not a video', path)
+        return
+
+    LOG.info('processing file %s', path)
+
+    try:
+        v = video.Video(path)
+        v.transcode(path.with_suffix('.m4v'),
+                    profile=profiles[args.profile])
+        if not args.keep:
+            path.unlink()
+    except video.VideoError as err:
+        LOG.error('%s: transcoding failed: %s',
+                  path, err)
 
 
-def process_files_in(dir, args=None):
-    LOG.info('processing files in %s', dir)
-    for item in dir.iterdir():
-        LOG.info('processing %s', item)
+def process_files_in(path):
+    global args
+    global profiles
+
+    LOG.info('processing files in %s', path)
+    for item in path.iterdir():
         if item.is_dir():
-            process_files_in(item, args=args)
-            try:
-                item.rmdir()
-                LOG.info('removed directory %s', item)
-            except OSError:
-                pass
+            process_files_in(item)
             continue
-
-        newpath = args.output_dir / item.relative_to(args.input_dir)
-        try:
-            v = video.Video(item)
-            v.transcode(newpath.with_suffix('.m4v'),
-                        create_dirs=True,
-                        profile=video.profiles[args.profile])
-            item.unlink()
-        except video.TranscodingFailed:
-            newpath = args.failed_dir / item.relative_to(args.input_dir)
-            move_file(item, newpath)
-        except video.NotAVideo:
-            move_file(item, newpath)
+        else:
+            process_one_file(item)
 
 
 def main():
+    global args
+    global profiles
+
     args = parse_args()
     logging.basicConfig(level=args.loglevel)
 
-    if args.create_dirs:
-        for dir in [args.input_dir, args.output_dir, args.failed_dir]:
-            if not dir.is_dir():
-                LOG.info('creating directory %s', dir)
-                dir.mkdir(mode=0o755)
+    if args.profiles is None:
+        args.profiles = pkg_resources.resource_filename(
+            __name__, 'data/profiles.yml')
 
-    process_files_in(args.input_dir, args=args)
+    with open(args.profiles) as fd:
+        profiles = yaml.load(fd)
+
+    for thing in (Path(x) for x in args.things):
+        if thing.is_dir():
+            process_files_in(thing)
+        else:
+            process_one_file(thing)
 
 if __name__ == '__main__':
     main()

@@ -1,8 +1,27 @@
 # Transcoddir
 
-Transcoddir ("Transcode Dir") will copy files from `--input-dir` to
-`--output-dir`, trancoding all videos to match `--profile`.  Video
-files that result in transcoding errors are moved to `--failed-dir`.
+Transcoddir will transcode a single file or all files in a directory
+tree into the specified format.
+
+## Usage
+
+Transcode a single file:
+
+    transcoddir path/to/file.mp4
+
+Transcode a directory:
+
+    transcoddir path/to/directory/
+
+Transcode multiple files:
+
+    transcoddir file1.mp4 file2.mkv file3.avi
+
+## Profiles
+
+Transcoding profiles are specified as a YAML document.  The defaults
+can be found in the `transcoddir/data/profiles.yml`, which defines
+"ipad" and "ipad-small".
 
 ## License
 

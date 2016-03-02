@@ -1,45 +1,11 @@
 import json
 import subprocess
 import logging
+import shlex
 
 from pathlib2 import Path
 
 LOG = logging.getLogger(__name__)
-
-
-profiles = {
-    'ipad': {
-        'audio_codec': 'aac',
-        'audio_args': ['-strict', '-2'],
-        'video_codec': 'libx264',
-        'height': 720,
-        'width': 1280,
-        'video_args': [
-            '-profile:v', 'main',
-            '-level', '3.1',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-x264-params', 'ref=4',
-            '-movflags', '+faststart',
-        ]
-    },
-    'ipad-small': {
-        'audio_codec': 'aac',
-        'audio_args': ['-strict', '-2'],
-        'video_codec': 'libx264',
-        'height': 480,
-        'width': 852,
-        'video_args': [
-            '-profile:v', 'main',
-            '-level', '3.1',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-x264-params', 'ref=4',
-            '-movflags', '+faststart',
-        ]
-    },
-}
-
 
 class VideoError(Exception):
     pass
@@ -60,11 +26,11 @@ class Video(object):
 
         # *that's* not a video format we care about
         if self._format['format_name'] == 'tty':
-            raise NotAVideo(self.path)
+            raise NotAVideo('unable to transcode ansi videos')
 
         # This checks that there is at least one video stream available
         if not any(s.get('codec_type') == 'video' for s in self._streams):
-            raise NotAVideo(self.path)
+            raise NotAVideo('no video streams available')
 
     def get_info(self):
         try:
@@ -74,7 +40,7 @@ class Video(object):
                  '-hide_banner',
                  '-print_format', 'json', str(self.path)]))
         except subprocess.CalledProcessError:
-            raise NotAVideo(self.path)
+            raise NotAVideo('failed to read video metadata')
 
         self._streams = res.get('streams')
         self._format = res.get('format')
@@ -162,11 +128,11 @@ class Video(object):
 
         cmd += ['-c:a', profile['audio_codec']]
         if profile.get('audio_args'):
-            cmd += profile['audio_args']
+            cmd += shlex.split(profile['audio_args'])
 
         cmd += ['-c:v', profile['video_codec']]
         if profile.get('video_args'):
-            cmd += profile['video_args']
+            cmd += shlex.split(profile['video_args'])
 
         cmd += [str(output)]
 
@@ -182,7 +148,7 @@ class Video(object):
             except OSError:
                 pass
 
-            raise TranscodingFailed(self.path)
+            raise TranscodingFailed('transcoding failed')
         except KeyboardInterrupt:
             LOG.error('%s: transcoding interrupted by user: '
                       'removing output file "%s"',
