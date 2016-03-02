@@ -12,4 +12,7 @@ setup(name='transcoddir',
       packages=find_packages(),
       install_requires=requires,
       entry_points={
-          'console_scripts': ['transcoddir = transcoddir.main:main']})
+          'console_scripts': [
+              'transcoddir = transcoddir.main:main',
+              'transmission-torrent-done = transcoddir.transmission:torrent_done',
+          ]})
